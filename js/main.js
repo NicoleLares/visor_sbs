@@ -1,13 +1,28 @@
 
-import { createStereoViewer, DEFAULT_CONFIG } from './viewer.js';
-import { createCalibrationGUI } from './controls.js';
-import { loadSbsImage } from './fileLoader.js';
-import { createImmersiveMode, showToast } from './ui.js';
+import {
+  createStereoViewer,
+  DEFAULT_CONFIG
+} from './viewer.js';
 
-// NUEVO: controles táctiles para celular.
-import { enableTouchCalibration } from './touchGestures.js';
+import {
+  createCalibrationGUI
+} from './controls.js';
+
+import {
+  loadSbsImage
+} from './fileLoader.js';
+
+import {
+  createImmersiveMode,
+  showToast
+} from './ui.js';
+
+import {
+  createLensCalibrationOverlay
+} from './lensCalibration.js';
 
 const config = { ...DEFAULT_CONFIG };
+
 const stage = document.getElementById('viewerStage');
 const info = document.getElementById('imageStatus');
 const dimensions = document.getElementById('imageDimensions');
@@ -22,9 +37,9 @@ const demoButtons = [
 let requestCounter = 0;
 let viewer;
 
-// ============================================
-// INICIALIZAR VISOR THREE.JS
-// ============================================
+// ==========================================
+// INICIALIZAR VISOR
+// ==========================================
 
 try {
   viewer = createStereoViewer(stage, config);
@@ -42,60 +57,81 @@ try {
   throw error;
 }
 
-// ============================================
-// PANEL DE CALIBRACIÓN EXISTENTE
-// ============================================
+// ==========================================
+// NUEVO: REFERENCIAS DE LENTES
+// ==========================================
+
+const lensOverlay = createLensCalibrationOverlay(
+  stage,
+  config,
+  viewer
+);
+
+// ==========================================
+// CONTROLES LIL-GUI
+// ==========================================
 
 const calibration = createCalibrationGUI(
   document.getElementById('guiHost'),
   config,
-  () => viewer.update()
+  () => {
+    viewer.update();
+    lensOverlay.refresh();
+  }
 );
 
-// ============================================
-// MODO CARDBOARD EXISTENTE
-// ============================================
+// ==========================================
+// CARDBOARD Y PANTALLA COMPLETA
+// ==========================================
 
 createImmersiveMode(() => viewer.resize());
 
-// ============================================
-// NUEVO: CALIBRACIÓN TÁCTIL
-// ============================================
+// ==========================================
+// CONSERVAR GESTOS TÁCTILES
+// ==========================================
 
-// Permite:
-// - Arrastrar con un dedo para mover la imagen.
-// - Pellizcar con dos dedos para hacer zoom.
-// - Deslizar dos dedos para ajustar paralaje.
-// - Sincronizar los valores con lil-gui.
-//
-// No modifica los controles existentes ni
-// interfiere con el modo Cardboard.
+// Si el archivo táctil ya existe, seguirá funcionando.
+// Si falta en una copia anterior del proyecto,
+// el visor podrá abrir sin él.
 
-enableTouchCalibration(
-  stage,
-  config,
-  viewer,
-  calibration
-);
+import('./touchGestures.js')
+  .then(({ enableTouchCalibration }) => {
+    enableTouchCalibration(
+      stage,
+      config,
+      viewer,
+      calibration
+    );
+  })
+  .catch(error => {
+    console.warn(
+      'Controles táctiles no disponibles:',
+      error
+    );
+  });
 
-// ============================================
+// ==========================================
 // RESTABLECER CALIBRACIÓN
-// ============================================
+// ==========================================
 
 function resetCalibration() {
   Object.assign(config, DEFAULT_CONFIG);
 
   calibration.refresh();
   viewer.update();
+  lensOverlay.refresh();
 
   showToast('Calibración restablecida.');
 }
 
-// ============================================
-// CARGAR Y MOSTRAR IMÁGENES SBS
-// ============================================
+// ==========================================
+// CARGAR IMAGEN SBS
+// ==========================================
 
-async function displaySource(source, selectedDemo = -1) {
+async function displaySource(
+  source,
+  selectedDemo = -1
+) {
   const requestId = ++requestCounter;
 
   info.textContent = 'Cargando fotografía…';
@@ -103,10 +139,12 @@ async function displaySource(source, selectedDemo = -1) {
   try {
     const { image, name } = await loadSbsImage(source);
 
-    // Ignorar el resultado de una carga anterior.
     if (requestId !== requestCounter) return;
 
-    const { width, height } = viewer.setImage(image, name);
+    const { width, height } = viewer.setImage(
+      image,
+      name
+    );
 
     emptyState.hidden = true;
 
@@ -145,9 +183,9 @@ async function displaySource(source, selectedDemo = -1) {
   }
 }
 
-// ============================================
-// CARGAR IMAGEN DESDE EL DISPOSITIVO
-// ============================================
+// ==========================================
+// CARGAR ARCHIVOS DESDE EL CELULAR O PC
+// ==========================================
 
 fileInput.addEventListener('change', () => {
   const file = fileInput.files?.[0];
@@ -156,69 +194,82 @@ fileInput.addEventListener('change', () => {
     displaySource(file);
   }
 
-  // Permitir seleccionar dos veces el mismo archivo.
   fileInput.value = '';
 });
 
-// ============================================
+// ==========================================
 // IMÁGENES DE DEMOSTRACIÓN
-// ============================================
+// ==========================================
 
 demoButtons[0].addEventListener('click', () => {
-  displaySource('./assets/images/demo-sbs-1.jpg', 0);
+  displaySource(
+    './assets/images/demo-sbs-1.jpg',
+    0
+  );
 });
 
 demoButtons[1].addEventListener('click', () => {
-  displaySource('./assets/images/demo-sbs-2.jpg', 1);
+  displaySource(
+    './assets/images/demo-sbs-2.jpg',
+    1
+  );
 });
 
-// ============================================
+// ==========================================
 // BOTÓN RESTABLECER
-// ============================================
+// ==========================================
 
 document
   .getElementById('resetBtn')
   .addEventListener('click', resetCalibration);
 
-// ============================================
-// GUARDAR CALIBRACIÓN EN JSON
-// ============================================
+// ==========================================
+// GUARDAR AJUSTES EN JSON
+// ==========================================
 
-document.getElementById('saveBtn').addEventListener('click', () => {
-  const payload = {
-    proyecto: 'StereoLab / Three.js',
-    imagen: viewer.getImageInfo(),
-    calibracion: { ...config },
-    fecha: new Date().toISOString(),
-    nota: 'Estos ajustes no modifican el archivo de imagen original.',
-  };
+document
+  .getElementById('saveBtn')
+  .addEventListener('click', () => {
+    const payload = {
+      proyecto: 'StereoLab / Three.js',
 
-  const blob = new Blob(
-    [JSON.stringify(payload, null, 2)],
-    { type: 'application/json' }
-  );
+      imagen: viewer.getImageInfo(),
 
-  const link = document.createElement('a');
-  const url = URL.createObjectURL(blob);
+      calibracion: { ...config },
 
-  link.href = url;
-  link.download = 'calibracion-sbs.json';
+      fecha: new Date().toISOString(),
 
-  document.body.append(link);
-  link.click();
-  link.remove();
+      nota:
+        'Estos ajustes no modifican el archivo de imagen original.',
+    };
 
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const blob = new Blob(
+      [JSON.stringify(payload, null, 2)],
+      { type: 'application/json' }
+    );
 
-  showToast('Ajustes descargados como JSON.');
-});
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
 
-// ============================================
-// ARRASTRAR Y SOLTAR ARCHIVOS DESDE PC
-// ============================================
+    link.href = url;
+    link.download = 'calibracion-sbs.json';
+
+    document.body.append(link);
+    link.click();
+    link.remove();
+
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    showToast('Ajustes descargados como JSON.');
+  });
+
+// ==========================================
+// ARRASTRAR Y SOLTAR IMÁGENES EN PC
+// ==========================================
 
 function dragOver(event) {
   event.preventDefault();
+
   stage.classList.add('drag-over');
 }
 
@@ -229,7 +280,7 @@ function dragLeave() {
 stage.addEventListener('dragover', dragOver);
 stage.addEventListener('dragleave', dragLeave);
 
-stage.addEventListener('drop', (event) => {
+stage.addEventListener('drop', event => {
   event.preventDefault();
   dragLeave();
 
@@ -240,11 +291,11 @@ stage.addEventListener('drop', (event) => {
   }
 });
 
-// ============================================
-// CARGAR IMAGEN INICIAL
-// ============================================
+// ==========================================
+// IMAGEN INICIAL
+// ==========================================
 
-// Se precarga una fotografía para que el visor
-// no aparezca vacío al abrir la aplicación.
-
-displaySource('./assets/images/demo-sbs-1.jpg', 0);
+displaySource(
+  './assets/images/demo-sbs-1.jpg',
+  0
+);

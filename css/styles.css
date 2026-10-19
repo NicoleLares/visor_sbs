@@ -803,3 +803,85 @@ body.cardboard-mode #viewerStage canvas {
   outline: 3px dashed var(--accent);
   outline-offset: -5px;
 }
+
+/* ==========================================
+   CALIBRACIÓN DE LENTES
+========================================== */
+
+/* Mantener gestos táctiles sobre la imagen */
+.viewer-stage {
+  touch-action: none;
+}
+
+/* Capa visual, sin bloquear el touch */
+.lens-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* Ocultar los elementos desactivados */
+.lens-overlay[hidden],
+.lens-dot[hidden],
+.lens-ruler[hidden] {
+  display: none !important;
+}
+
+/* Puntos blancos: centros de las vistas */
+.lens-dot {
+  position: absolute;
+  top: 50%;
+
+  transform: translate(-50%, -50%);
+
+  width: 10px;
+  height: 10px;
+
+  background: #ffffff;
+  border: 1px solid #000000;
+  border-radius: 50%;
+
+  box-shadow:
+    0 0 0 2px #ffffff7a,
+    0 0 8px #000000;
+}
+
+/* Regla de referencia */
+.lens-ruler {
+  position: absolute;
+
+  left: 50%;
+  bottom: 14px;
+
+  transform: translateX(-50%);
+
+  text-align: center;
+  color: #ffffff;
+  text-shadow: 0 1px 4px #000000;
+}
+
+.lens-ruler-bar {
+  display: block;
+
+  height: 10px;
+
+  border: 2px solid white;
+  border-top: 0;
+
+  background: #00000044;
+}
+
+.lens-ruler-caption {
+  display: block;
+
+  font-size: 10px;
+  margin-top: 4px;
+
+  white-space: nowrap;
+}
+
+/* Ocultar la regla al entrar en Cardboard */
+body.cardboard-mode .lens-ruler {
+  display: none !important;
+}
